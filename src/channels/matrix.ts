@@ -84,7 +84,7 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>): 
       try {
         const client = (adapter as any).client;
         if (client) {
-          const direct = await client.getAccountDataFromServer('m.direct') as Record<string, string[]> | null;
+          const direct = (await client.getAccountDataFromServer('m.direct')) as Record<string, string[]> | null;
           const roomIds = direct?.[userHandle];
           if (roomIds?.[0]) {
             cachedRoomId = roomIds[0];
@@ -139,15 +139,14 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>): 
       // getJoinedMembers() only returns loaded members; with lazy loading enabled
       // the sender's member event may not be loaded yet on first message.
       // Fall back to currentState.members, which is populated from the event batch.
-      let otherUserId = room.getJoinedMembers()
-        .find((m: { userId: string }) => m.userId !== botId)?.userId;
+      let otherUserId = room.getJoinedMembers().find((m: { userId: string }) => m.userId !== botId)?.userId;
 
       if (!otherUserId) {
         const members = room.currentState?.members as
-          Record<string, { userId: string; membership: string }> | undefined;
+          | Record<string, { userId: string; membership: string }>
+          | undefined;
         if (members) {
-          otherUserId = Object.values(members)
-            .find((m) => m.membership === 'join' && m.userId !== botId)?.userId;
+          otherUserId = Object.values(members).find((m) => m.membership === 'join' && m.userId !== botId)?.userId;
         }
       }
 
