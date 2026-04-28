@@ -308,6 +308,12 @@ function buildMounts(
     mounts.push({ hostPath: skillsSrc, containerPath: '/app/skills', readonly: true });
   }
 
+  // Agent-specific skills — only mounted when the directory exists.
+  const agentSkillsSrc = path.join(projectRoot, 'agent-skills');
+  if (fs.existsSync(agentSkillsSrc)) {
+    mounts.push({ hostPath: agentSkillsSrc, containerPath: '/app/agent-skills', readonly: true });
+  }
+
   // Additional mounts from container config
   if (containerConfig.additionalMounts && containerConfig.additionalMounts.length > 0) {
     const validated = validateAdditionalMounts(containerConfig.additionalMounts, agentGroup.name);
@@ -352,9 +358,18 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
     desired = containerConfig.skills;
   }
 
-  const desiredSet = new Set(desired);
+  // Agent skills — explicit opt-in, default none.
+  const agentSkillsDesired = containerConfig.agentSkills ?? [];
 
-  // Remove symlinks not in the desired set
+  // Build the full desired set (container skills + agent skills, no duplicates).
+  // Agent skills are prefixed with their container path so stale-cleanup can
+  // tell the two apart even when names collide.
+  const desiredSet = new Set(desired);
+  const agentDesiredSet = new Set(agentSkillsDesired);
+  // A name may appear in both; container skill wins (it gets /app/skills/ target).
+  const allDesiredNames = new Set([...desired, ...agentSkillsDesired]);
+
+  // Remove symlinks whose name is no longer in either desired set.
   for (const entry of fs.readdirSync(skillsDir)) {
     const entryPath = path.join(skillsDir, entry);
     let isSymlink = false;
@@ -363,23 +378,50 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
     } catch {
       continue;
     }
-    if (isSymlink && !desiredSet.has(entry)) {
+    if (isSymlink && !allDesiredNames.has(entry)) {
       fs.unlinkSync(entryPath);
     }
   }
 
-  // Create symlinks for desired skills (container path targets)
+  // Create or update symlinks for container skills.
   for (const skill of desired) {
     const linkPath = path.join(skillsDir, skill);
-    let exists = false;
+    const target = `/app/skills/${skill}`;
+    let currentTarget: string | null = null;
     try {
-      fs.lstatSync(linkPath);
-      exists = true;
+      currentTarget = fs.readlinkSync(linkPath);
     } catch {
       /* missing */
     }
-    if (!exists) {
-      fs.symlinkSync(`/app/skills/${skill}`, linkPath);
+    if (currentTarget !== target) {
+      try {
+        fs.unlinkSync(linkPath);
+      } catch {
+        /* missing */
+      }
+      fs.symlinkSync(target, linkPath);
+    }
+  }
+
+  // Create or update symlinks for agent skills (skipped if name already
+  // claimed by a container skill above).
+  for (const skill of agentSkillsDesired) {
+    if (desiredSet.has(skill)) continue;
+    const linkPath = path.join(skillsDir, skill);
+    const target = `/app/agent-skills/${skill}`;
+    let currentTarget: string | null = null;
+    try {
+      currentTarget = fs.readlinkSync(linkPath);
+    } catch {
+      /* missing */
+    }
+    if (currentTarget !== target) {
+      try {
+        fs.unlinkSync(linkPath);
+      } catch {
+        /* missing */
+      }
+      fs.symlinkSync(target, linkPath);
     }
   }
 }
