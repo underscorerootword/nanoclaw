@@ -348,10 +348,20 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       log.info('Chat SDK bridge initialized', { adapter: adapter.name });
     },
 
-    async deliver(platformId: string, threadId: string | null, message): Promise<string | undefined> {
+    async deliver(platformId: string, threadId: string | null, message, agentGroupFolder?: string): Promise<string | undefined> {
       // platformId is already in the adapter's encoded format (e.g. "telegram:6037840640",
       // "discord:guildId:channelId") — use it directly as the thread ID
       const tid = threadId ?? platformId;
+
+      // If the adapter exposes withAgentContext (e.g. Matrix with per-agent room
+      // overrides), wrap the delivery so resolveThreadId can read the agent folder.
+      const withCtx = (adapter as any).withAgentContext as
+        | ((folder: string, fn: () => Promise<string | undefined>) => Promise<string | undefined>)
+        | undefined;
+      if (agentGroupFolder && withCtx) {
+        return withCtx(agentGroupFolder, () => this.deliver(platformId, threadId, message));
+      }
+
       const content = message.content as Record<string, unknown>;
 
       if (content.operation === 'edit' && content.messageId) {

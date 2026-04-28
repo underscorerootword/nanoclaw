@@ -19,6 +19,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createMatrixAdapter } from '@beeper/chat-adapter-matrix';
 
 import { log } from '../log.js';
@@ -31,31 +32,46 @@ import { registerChannelAdapter } from './channel-registry.js';
 // ---------------------------------------------------------------------------
 
 interface MatrixConfig {
-  rooms: Record<string, string>; // userHandle → roomId
+  rooms: Record<string, string>; // userHandle → roomId (shared default)
+  agents?: Record<string, Record<string, string>>; // agentGroupFolder → { userHandle → roomId }
 }
 
 function matrixConfigPath(groupFolder: string): string {
   return path.join('groups', groupFolder, 'matrix.yaml');
 }
 
-// Minimal parser for the specific YAML shape we write:
+// Minimal parser for the YAML shape we write:
 //   rooms:
 //     "@user:server": "!room:server"
+//   agents:
+//     a1-o2:
+//       "@user:server": "!other-room:server"
 function parseMatrixYaml(raw: string): MatrixConfig {
   const config: MatrixConfig = { rooms: {} };
-  let inRooms = false;
+  type Section = 'rooms' | 'agents' | null;
+  let section: Section = null;
+  let agentKey: string | null = null;
+
   for (const line of raw.split('\n')) {
-    if (/^rooms\s*:/.test(line)) {
-      inRooms = true;
-      continue;
-    }
-    if (inRooms) {
-      if (/^\S/.test(line)) {
-        inRooms = false;
-        continue;
-      } // new top-level key
+    if (/^rooms\s*:/.test(line))  { section = 'rooms';  agentKey = null; continue; }
+    if (/^agents\s*:/.test(line)) { section = 'agents'; agentKey = null; continue; }
+    if (/^\S/.test(line))         { section = null;      agentKey = null; continue; }
+
+    if (section === 'rooms') {
       const m = line.match(/^\s+"([^"]+)"\s*:\s*"([^"]+)"/);
       if (m) config.rooms[m[1]] = m[2];
+    } else if (section === 'agents') {
+      // Two-space indent = agent folder key; four-space indent = room mapping
+      const folderMatch = line.match(/^  ([a-zA-Z0-9_-]+)\s*:/);
+      if (folderMatch) { agentKey = folderMatch[1]; continue; }
+      if (agentKey) {
+        const m = line.match(/^\s{4}"([^"]+)"\s*:\s*"([^"]+)"/);
+        if (m) {
+          config.agents ??= {};
+          config.agents[agentKey] ??= {};
+          config.agents[agentKey][m[1]] = m[2];
+        }
+      }
     }
   }
   return config;
@@ -65,6 +81,15 @@ function serializeMatrixYaml(config: MatrixConfig): string {
   const lines = ['rooms:'];
   for (const [k, v] of Object.entries(config.rooms)) {
     lines.push(`  "${k}": "${v}"`);
+  }
+  if (config.agents && Object.keys(config.agents).length > 0) {
+    lines.push('agents:');
+    for (const [folder, rooms] of Object.entries(config.agents)) {
+      lines.push(`  ${folder}:`);
+      for (const [k, v] of Object.entries(rooms)) {
+        lines.push(`    "${k}": "${v}"`);
+      }
+    }
   }
   return lines.join('\n') + '\n';
 }
@@ -126,6 +151,15 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, g
   // inbound messages and persisted back to matrix.yaml so it survives restarts.
   const userHandleToRoomCache = new Map<string, string>();
 
+  // AsyncLocalStorage carries the sending agent's folder name into resolveThreadId
+  // without changing the postMessage signature. Thread-safe: each concurrent
+  // delivery gets its own store value via als.run().
+  const als = new AsyncLocalStorage<string>();
+
+  // Expose on the adapter so chat-sdk-bridge can set the context before postMessage.
+  (adapter as any).withAgentContext = (folder: string, fn: () => Promise<unknown>) =>
+    als.run(folder, fn);
+
   // Seed from matrix.yaml if a group folder is configured.
   if (groupFolder) {
     const config = loadMatrixConfig(groupFolder);
@@ -167,6 +201,20 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, g
     if (!isUserHandle(threadId)) return threadId;
 
     const userHandle = threadId.startsWith('matrix:') ? threadId.slice('matrix:'.length) : threadId;
+
+    // Check per-agent override in matrix.yaml (agents: <folder>: ...) first.
+    const agentFolder = als.getStore();
+    if (agentFolder && groupFolder) {
+      const config = loadMatrixConfig(groupFolder);
+      const agentRoomId = config.agents?.[agentFolder]?.[userHandle];
+      if (agentRoomId) {
+        try {
+          return adapter.encodeThreadId({ roomID: agentRoomId });
+        } catch {
+          // fall through to shared room lookup
+        }
+      }
+    }
 
     // Use the room we last received a message from — avoids openDM which requires
     // createRoom permissions that may be blocked server-side.

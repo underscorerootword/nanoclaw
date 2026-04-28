@@ -57,6 +57,7 @@ export interface ChannelDeliveryAdapter {
     kind: string,
     content: string,
     files?: OutboundFile[],
+    agentGroupFolder?: string,
   ): Promise<string | undefined>;
   setTyping?(channelType: string, platformId: string, threadId: string | null): Promise<void>;
 }
@@ -189,7 +190,7 @@ async function drainSession(session: Session): Promise<void> {
 
     for (const msg of undelivered) {
       try {
-        const platformMsgId = await deliverMessage(msg, session, inDb);
+        const platformMsgId = await deliverMessage(msg, session, inDb, agentGroup.folder);
         markDelivered(inDb, msg.id, platformMsgId ?? null);
         deliveryAttempts.delete(msg.id);
 
@@ -242,6 +243,7 @@ async function deliverMessage(
   },
   session: Session,
   inDb: Database.Database,
+  agentGroupFolder?: string,
 ): Promise<string | undefined> {
   if (!deliveryAdapter) {
     log.warn('No delivery adapter configured, dropping message', { id: msg.id });
@@ -359,6 +361,7 @@ async function deliverMessage(
     msg.kind,
     msg.content,
     files,
+    agentGroupFolder,
   );
   log.info('Message delivered', {
     id: msg.id,
