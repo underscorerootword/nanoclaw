@@ -53,9 +53,21 @@ function parseMatrixYaml(raw: string): MatrixConfig {
   let agentKey: string | null = null;
 
   for (const line of raw.split('\n')) {
-    if (/^rooms\s*:/.test(line))  { section = 'rooms';  agentKey = null; continue; }
-    if (/^agents\s*:/.test(line)) { section = 'agents'; agentKey = null; continue; }
-    if (/^\S/.test(line))         { section = null;      agentKey = null; continue; }
+    if (/^rooms\s*:/.test(line)) {
+      section = 'rooms';
+      agentKey = null;
+      continue;
+    }
+    if (/^agents\s*:/.test(line)) {
+      section = 'agents';
+      agentKey = null;
+      continue;
+    }
+    if (/^\S/.test(line)) {
+      section = null;
+      agentKey = null;
+      continue;
+    }
 
     if (section === 'rooms') {
       const m = line.match(/^\s+"([^"]+)"\s*:\s*"([^"]+)"/);
@@ -63,7 +75,10 @@ function parseMatrixYaml(raw: string): MatrixConfig {
     } else if (section === 'agents') {
       // Two-space indent = agent folder key; four-space indent = room mapping
       const folderMatch = line.match(/^  ([a-zA-Z0-9_-]+)\s*:/);
-      if (folderMatch) { agentKey = folderMatch[1]; continue; }
+      if (folderMatch) {
+        agentKey = folderMatch[1];
+        continue;
+      }
       if (agentKey) {
         const m = line.match(/^\s{4}"([^"]+)"\s*:\s*"([^"]+)"/);
         if (m) {
@@ -157,8 +172,7 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, g
   const als = new AsyncLocalStorage<string>();
 
   // Expose on the adapter so chat-sdk-bridge can set the context before postMessage.
-  (adapter as any).withAgentContext = (folder: string, fn: () => Promise<unknown>) =>
-    als.run(folder, fn);
+  (adapter as any).withAgentContext = (folder: string, fn: () => Promise<unknown>) => als.run(folder, fn);
 
   // Seed from matrix.yaml if a group folder is configured.
   if (groupFolder) {
@@ -251,6 +265,15 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, g
     try {
       const { roomID } = adapter.decodeThreadId(threadId);
       if (!roomID.startsWith('!')) return origChannelIdFromThreadId(threadId);
+
+      // If this room has an explicit per-agent mapping in the yaml, don't normalise
+      // to a user handle — keep the room ID so it routes to its own messaging group
+      // and only reaches the wired agent, not every agent on the handle-based group.
+      if (groupFolder) {
+        const config = loadMatrixConfig(groupFolder);
+        const agentRooms = config.agents ? Object.values(config.agents).flatMap(Object.values) : [];
+        if (agentRooms.includes(roomID)) return origChannelIdFromThreadId(threadId);
+      }
 
       const cached = roomToUserCache.get(roomID);
       if (cached) return `matrix:${cached}`;

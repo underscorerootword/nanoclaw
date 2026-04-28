@@ -348,7 +348,12 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       log.info('Chat SDK bridge initialized', { adapter: adapter.name });
     },
 
-    async deliver(platformId: string, threadId: string | null, message, agentGroupFolder?: string): Promise<string | undefined> {
+    async deliver(
+      platformId: string,
+      threadId: string | null,
+      message,
+      agentGroupFolder?: string,
+    ): Promise<string | undefined> {
       // platformId is already in the adapter's encoded format (e.g. "telegram:6037840640",
       // "discord:guildId:channelId") — use it directly as the thread ID
       const tid = threadId ?? platformId;

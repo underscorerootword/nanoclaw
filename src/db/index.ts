@@ -22,6 +22,7 @@ export {
   getMessagingGroupAgentByPair,
   updateMessagingGroupAgent,
   deleteMessagingGroupAgent,
+  getMessagingGroupsByAgentGroup,
 } from './messaging-groups.js';
 export {
   createSession,

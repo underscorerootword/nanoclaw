@@ -132,7 +132,12 @@ export interface ChannelAdapter {
   // Outbound delivery — returns the platform message ID if available.
   // agentGroupFolder is the sending agent group's folder name (e.g. "a1-o2");
   // adapters may use it to look up per-agent room overrides.
-  deliver(platformId: string, threadId: string | null, message: OutboundMessage, agentGroupFolder?: string): Promise<string | undefined>;
+  deliver(
+    platformId: string,
+    threadId: string | null,
+    message: OutboundMessage,
+    agentGroupFolder?: string,
+  ): Promise<string | undefined>;
 
   // Optional
   setTyping?(platformId: string, threadId: string | null): Promise<void>;

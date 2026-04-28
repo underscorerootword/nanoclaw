@@ -4,6 +4,40 @@ All notable changes to NanoClaw will be documented in this file.
 
 For detailed release notes, see the [full changelog on the documentation site](https://docs.nanoclaw.dev/changelog).
 
+---
+
+## Local customisations
+
+Changes made to this install relative to the upstream base. Most recent first.
+DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
+
+### 2026-04-28 — Matrix: room-based inbound routing
+
+**Problem:** Both A1-O1 and A1-O2 were wired to a single handle-based messaging group (`@upgrade0999`). A message sent to A1-O2's dedicated room was normalised to the user handle by `channelIdFromThreadId`, then fanned out to both agents — so A1-O1 also responded.
+
+**Fix:** `channelIdFromThreadId` in `src/channels/matrix.ts` now checks the adapter's `matrix.yaml` before normalising. If the room appears in the `agents:` section it is returned as-is, routing to a room-specific messaging group wired to only that agent. Applied to both the `matrix` and `matrix-a1t1` adapters.
+
+**DB changes:**
+- Created dedicated messaging groups per room: A1-O1 room → A1-O1 only, A1-O2 room → A1-O2 only, A1-T1 room → A1-T1 only
+- Removed A1-O2 and A1-T1 from handle-based fallback groups; deleted now-empty handle-based `matrix-a1t1` group
+- Deleted two stale room-ID messaging groups left over from initial Matrix setup, plus their orphaned session and pending channel approval
+
+**Files:** `src/channels/matrix.ts`
+
+### 2026-04-26 — Matrix: per-agent room overrides and yaml persistence
+
+Three changes landed together:
+
+1. **Per-agent room overrides** — Added optional `agents:` section to `matrix.yaml`. When present, delivery for a named agent resolves to that agent's specific room rather than the shared default. Agent folder name is threaded through the delivery chain via `AsyncLocalStorage`.
+
+2. **matrix.yaml applied to primary adapter** — Extended room persistence from `matrix-a1t1` to the primary `matrix` adapter. Config files: `groups/matrix/matrix.yaml` (A1-O1 + A1-O2) and `groups/a1-t1/matrix.yaml` (A1-T1).
+
+3. **Persistent room config to survive restarts** — Matrix DM room IDs are now persisted to `matrix.yaml` in the agent group's `groups/<folder>/` directory. Loaded synchronously at adapter startup before the first delivery poll fires. Fixes delivery failures after host restarts caused by empty in-memory cache + blocked `createRoom` (`M_INVITE_BLOCKED`).
+
+**Files:** `src/channels/matrix.ts`, `src/channels/chat-sdk-bridge.ts`, `src/channels/adapter.ts`, `src/delivery.ts`, `src/index.ts`
+
+---
+
 ## [2.0.0] - 2026-04-22
 
 Major version. NanoClaw v2 is a substantial architectural rewrite. Existing forks should run `/migrate-nanoclaw` (clean-base replay of customizations) or `/update-nanoclaw` (selective cherry-pick) before resuming work.
