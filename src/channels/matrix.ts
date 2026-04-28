@@ -45,9 +45,15 @@ function parseMatrixYaml(raw: string): MatrixConfig {
   const config: MatrixConfig = { rooms: {} };
   let inRooms = false;
   for (const line of raw.split('\n')) {
-    if (/^rooms\s*:/.test(line)) { inRooms = true; continue; }
+    if (/^rooms\s*:/.test(line)) {
+      inRooms = true;
+      continue;
+    }
     if (inRooms) {
-      if (/^\S/.test(line)) { inRooms = false; continue; } // new top-level key
+      if (/^\S/.test(line)) {
+        inRooms = false;
+        continue;
+      } // new top-level key
       const m = line.match(/^\s+"([^"]+)"\s*:\s*"([^"]+)"/);
       if (m) config.rooms[m[1]] = m[2];
     }
@@ -109,10 +115,7 @@ const SUFFIX_KEYS = [
  *
  * Both resolutions are cached for the process lifetime.
  */
-function wrapWithDmResolution(
-  adapter: ReturnType<typeof createMatrixAdapter>,
-  groupFolder?: string,
-): typeof adapter {
+function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, groupFolder?: string): typeof adapter {
   const origPostMessage = adapter.postMessage.bind(adapter);
   const origStartTyping = adapter.startTyping.bind(adapter);
   const origChannelIdFromThreadId = adapter.channelIdFromThreadId.bind(adapter);
@@ -310,7 +313,10 @@ function registerMatrixAdapter(adapterName: string, envPrefix: string, groupFold
 
       const allowlistRaw = get('INVITE_AUTOJOIN_ALLOWLIST');
       const inviterAllowlist = allowlistRaw
-        ? allowlistRaw.split(',').map((s) => s.trim()).filter(Boolean)
+        ? allowlistRaw
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
         : [];
       const autoJoinRaw = get('INVITE_AUTOJOIN');
       // Default to true (same as original adapter behaviour).
@@ -387,7 +393,7 @@ function registerMatrixAdapter(adapterName: string, envPrefix: string, groupFold
 }
 
 // Primary Matrix instance — reads MATRIX_* env vars.
-registerMatrixAdapter('matrix', 'MATRIX');
+registerMatrixAdapter('matrix', 'MATRIX', 'matrix');
 
 // Additional Matrix instances — one per extra bot account.
 // Each reads <PREFIX>_* env vars and registers under a distinct channel type.
