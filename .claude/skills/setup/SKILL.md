@@ -1,6 +1,7 @@
 ---
 name: setup
 description: Run initial NanoClaw setup. Use when user wants to install NanoClaw, configure it, or go through first-time setup. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
+allowed-tools: Bash(git remote*), Bash(bash setup.sh), Bash(bash nanoclaw.sh), Bash(pnpm exec tsx setup/index.ts*)
 ---
 
 # NanoClaw Setup
