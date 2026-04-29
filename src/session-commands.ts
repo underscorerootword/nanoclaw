@@ -30,10 +30,7 @@ export interface AgentResult {
 export interface SessionCommandDeps {
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => Promise<void>;
-  runAgent: (
-    prompt: string,
-    onOutput: (result: AgentResult) => Promise<void>,
-  ) => Promise<'success' | 'error'>;
+  runAgent: (prompt: string, onOutput: (result: AgentResult) => Promise<void>) => Promise<'success' | 'error'>;
   closeStdin: () => void;
   advanceCursor: (timestamp: string) => void;
   formatMessages: (msgs: NewMessage[], timezone: string) => string;
@@ -63,9 +60,7 @@ export async function handleSessionCommand(opts: {
 }): Promise<{ handled: false } | { handled: true; success: boolean }> {
   const { missedMessages, isMainGroup, groupName, triggerPattern, timezone, deps } = opts;
 
-  const cmdMsg = missedMessages.find(
-    (m) => extractSessionCommand(m.content, triggerPattern) !== null,
-  );
+  const cmdMsg = missedMessages.find((m) => extractSessionCommand(m.content, triggerPattern) !== null);
   const command = cmdMsg ? extractSessionCommand(cmdMsg.content, triggerPattern) : null;
 
   if (!command || !cmdMsg) return { handled: false };

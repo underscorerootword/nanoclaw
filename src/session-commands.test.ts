@@ -142,10 +142,7 @@ describe('handleSessionCommand', () => {
 
   it('processes pre-compact messages before /compact', async () => {
     const deps = makeDeps();
-    const msgs = [
-      makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
-    ];
+    const msgs = [makeMsg('summarize this', { timestamp: '99' }), makeMsg('/compact', { timestamp: '100' })];
     const result = await handleSessionCommand({
       missedMessages: msgs,
       isMainGroup: true,
@@ -178,10 +175,12 @@ describe('handleSessionCommand', () => {
 
   it('reports failure when command-stage runAgent returns error without streamed status', async () => {
     // runAgent resolves 'error' but callback never gets status: 'error'
-    const deps = makeDeps({ runAgent: vi.fn().mockImplementation(async (prompt, onOutput) => {
-      await onOutput({ status: 'success', result: null });
-      return 'error';
-    })});
+    const deps = makeDeps({
+      runAgent: vi.fn().mockImplementation(async (prompt, onOutput) => {
+        await onOutput({ status: 'success', result: null });
+        return 'error';
+      }),
+    });
     const result = await handleSessionCommand({
       missedMessages: [makeMsg('/compact')],
       isMainGroup: true,
@@ -196,10 +195,7 @@ describe('handleSessionCommand', () => {
 
   it('returns success:false on pre-compact failure with no output', async () => {
     const deps = makeDeps({ runAgent: vi.fn().mockResolvedValue('error') });
-    const msgs = [
-      makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
-    ];
+    const msgs = [makeMsg('summarize this', { timestamp: '99' }), makeMsg('/compact', { timestamp: '100' })];
     const result = await handleSessionCommand({
       missedMessages: msgs,
       isMainGroup: true,
