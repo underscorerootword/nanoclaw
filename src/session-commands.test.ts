@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { extractSessionCommand, handleSessionCommand, isSessionCommandAllowed } from './session-commands.js';
-import type { NewMessage } from './types.js';
-import type { SessionCommandDeps } from './session-commands.js';
+import type { NewMessage, SessionCommandDeps } from './session-commands.js';
 
 describe('extractSessionCommand', () => {
   const trigger = /^@Andy\b/i;
