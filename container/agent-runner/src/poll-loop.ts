@@ -270,6 +270,11 @@ async function processQuery(
   const pollHandle = setInterval(() => {
     if (done) return;
 
+    // Keep the heartbeat alive during long SDK retry windows. Without this,
+    // a silent API retry (no streaming events) starves touchHeartbeat() and
+    // the host sweep kills the container thinking it's stuck.
+    touchHeartbeat();
+
     // Skip system messages (MCP tool responses) and /clear (needs fresh query).
     // Thread routing is the router's concern — if a message landed in this
     // session, the agent should see it. Per-thread sessions already isolate

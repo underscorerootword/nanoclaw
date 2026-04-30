@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@nanoco/nanoclaw-dashboard@0.3.0':
-    hash: 32ffddd6affa35a43d617dd928f7da686db5a0afb9e11390cf4de4137f773df6
+    hash: 4b22227547e90c8f2389ce2bd340ca1507a57b87a0758e52635f6ad56b8198fd
     path: patches/@nanoco__nanoclaw-dashboard@0.3.0.patch
 
 importers:
@@ -24,7 +24,7 @@ importers:
         version: 1.2.0
       '@nanoco/nanoclaw-dashboard':
         specifier: ^0.3.0
-        version: 0.3.0(patch_hash=32ffddd6affa35a43d617dd928f7da686db5a0afb9e11390cf4de4137f773df6)
+        version: 0.3.0(patch_hash=4b22227547e90c8f2389ce2bd340ca1507a57b87a0758e52635f6ad56b8198fd)
       '@onecli-sh/sdk':
         specifier: ^0.3.1
         version: 0.3.1
@@ -1870,7 +1870,7 @@ snapshots:
 
   '@matrix-org/matrix-sdk-crypto-wasm@18.2.0': {}
 
-  '@nanoco/nanoclaw-dashboard@0.3.0(patch_hash=32ffddd6affa35a43d617dd928f7da686db5a0afb9e11390cf4de4137f773df6)': {}
+  '@nanoco/nanoclaw-dashboard@0.3.0(patch_hash=4b22227547e90c8f2389ce2bd340ca1507a57b87a0758e52635f6ad56b8198fd)': {}
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)':
     dependencies:

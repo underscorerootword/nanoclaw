@@ -11,20 +11,30 @@ For detailed release notes, see the [full changelog on the documentation site](h
 Changes made to this install relative to the upstream base. Most recent first.
 DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
 
+### 2026-04-28 — poll-loop: heartbeat now updated during API retry windows
+
+**Problem:** `touchHeartbeat()` in `processQuery` was only called on incoming streaming events from the SDK. When the Claude API was degraded and the SDK retried silently (no events emitted during the backoff window), the heartbeat file went stale. The host sweep then killed the container at the 30-minute absolute ceiling, even though the container was legitimately waiting for the API to recover.
+
+**Fix:** Added `touchHeartbeat()` to the `pollHandle` setInterval inside `processQuery` (`container/agent-runner/src/poll-loop.ts`). This interval runs every 500ms concurrently with the streaming loop, so the heartbeat stays alive regardless of whether the SDK is emitting events or sitting silently through a retry.
+
+**Files:** `container/agent-runner/src/poll-loop.ts`
+
+---
+
 ### 2026-04-28 — Agent-specific skills and dashboard Skills page
 
 **Agent skills (`agent-skills/`):** New skill tier between container skills (global) and host skills (operator-only). Skills placed in `agent-skills/<name>/` are never available by default — each agent group opts in via `"agentSkills": ["name"]` in its `container.json`. A skill can be assigned to multiple groups without duplication. At spawn, the `agent-skills/` directory is mounted RO at `/app/agent-skills`, symlinks are created in `.claude-shared/skills/`, and any `instructions.md` is included in the composed `CLAUDE.md` as `agent-skill-<name>.md` fragments.
 
 Also fixed an existing TODO: container skill `instructions.md` fragments now respect the group's `skills` selection in `container.json` rather than always including all skills.
 
-**Dashboard Skills page (`/dashboard/skills`):** New dashboard screen listing all installed skills in three sections — Agent Skills (green, with "Assigned To" column showing which groups have each skill), Container Skills (purple), and Host Skills (blue). Data is included in the pusher snapshot and served via `GET /api/skills`.
-
-**Setup notes:**
+**Caveats:**
 - The `agent-skills/` directory must be created manually at the project root — it is not created automatically.
 - Each skill directory must contain a file named exactly `SKILL.md` (not `<name>-SKILL.md` or any other variant) for the dashboard to detect it.
 - No restart needed when adding new skills — the pusher re-scans `agent-skills/` every 60 seconds.
 
 **Files:** `src/container-config.ts`, `src/container-runner.ts`, `src/claude-md-compose.ts`, `src/dashboard-pusher.ts`, dashboard package patch (`patches/@nanoco__nanoclaw-dashboard@0.3.0.patch`)
+
+---
 
 ### 2026-04-28 — Matrix: room-based inbound routing
 

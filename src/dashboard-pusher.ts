@@ -185,7 +185,10 @@ function collectAgentGroups() {
   return getAllAgentGroups().map((g) => {
     const sessions = getSessionsByAgentGroup(g.id);
     const running = sessions.filter((s) => s.container_status === 'running' || s.container_status === 'idle');
-    const destinations = getDestinations(g.id);
+    const destinations = getDestinations(g.id).map((d) => ({
+      ...d,
+      target_name: d.target_type === 'agent' ? (getAgentGroup(d.target_id)?.name ?? null) : null,
+    }));
     const members = getMembers(g.id).map((m) => {
       const user = getUser(m.user_id);
       return { ...m, display_name: user?.display_name ?? null };
@@ -451,6 +454,7 @@ function collectContextWindows() {
   const results: unknown[] = [];
   const agentGroups = getAllAgentGroups();
   const nameMap = new Map(agentGroups.map((g) => [g.id, g.name]));
+  const folderMap = new Map(agentGroups.map((g) => [g.id, g.folder]));
 
   for (const agDir of fs.readdirSync(sessionsDir).filter((d) => d.startsWith('ag-'))) {
     const claudeDir = path.join(sessionsDir, agDir, '.claude-shared', 'projects');
@@ -491,7 +495,9 @@ function collectContextWindows() {
           const u = r.message.usage;
           const model = r.message.model || 'unknown';
           const ctx = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-          const max = 200000;
+          const folder = folderMap.get(agDir);
+          const containerCfg = folder ? readContainerConfig(folder) : null;
+          const max = containerCfg?.autoCompactWindow ?? 200000;
           results.push({
             agentGroupId: agDir,
             agentGroupName: nameMap.get(agDir),
