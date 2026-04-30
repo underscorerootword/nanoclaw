@@ -391,7 +391,11 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
       /* missing */
     }
     if (currentTarget !== target) {
-      try { fs.unlinkSync(linkPath); } catch { /* missing */ }
+      try {
+        fs.unlinkSync(linkPath);
+      } catch {
+        /* missing */
+      }
       fs.symlinkSync(target, linkPath);
     }
   }
@@ -409,7 +413,11 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
       /* missing */
     }
     if (currentTarget !== target) {
-      try { fs.unlinkSync(linkPath); } catch { /* missing */ }
+      try {
+        fs.unlinkSync(linkPath);
+      } catch {
+        /* missing */
+      }
       fs.symlinkSync(target, linkPath);
     }
   }

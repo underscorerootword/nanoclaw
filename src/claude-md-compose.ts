@@ -61,8 +61,7 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
   // Container skill fragments — only for skills enabled by this group's config.
   const skillsHostDir = path.join(process.cwd(), 'container', 'skills');
   if (fs.existsSync(skillsHostDir)) {
-    const enabledSkills =
-      config.skills === 'all' ? fs.readdirSync(skillsHostDir) : config.skills;
+    const enabledSkills = config.skills === 'all' ? fs.readdirSync(skillsHostDir) : config.skills;
     for (const skillName of enabledSkills) {
       const hostFragment = path.join(skillsHostDir, skillName, 'instructions.md');
       if (fs.existsSync(hostFragment)) {
