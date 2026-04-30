@@ -304,7 +304,7 @@ export class ClaudeProvider implements AgentProvider {
         env: this.env,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        settingSources: ['project', 'user'],
+        settingSources: ['user'],
         mcpServers: this.mcpServers,
         hooks: {
           PreToolUse: [{ hooks: [preToolUseHook] }],
