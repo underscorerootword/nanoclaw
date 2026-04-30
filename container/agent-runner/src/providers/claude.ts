@@ -253,6 +253,22 @@ function createPreCompactHook(assistantName?: string): HookCallback {
 /** Default auto-compact window when none is configured in container.json. */
 const DEFAULT_AUTO_COMPACT_WINDOW = 165000;
 
+// Claude Code built-in skills that are bundled with the binary (not filesystem-discovered).
+// The `skills` allowlist filters filesystem skills; these must be disabled via skillOverrides.
+// Update when bumping CLAUDE_CODE_VERSION in the Dockerfile if new built-ins appear.
+const CLAUDE_CODE_BUILTIN_SKILLS = [
+  'claude-api',
+  'fewer-permission-prompts',
+  'init',
+  'keybindings-help',
+  'loop',
+  'review',
+  'schedule',
+  'security-review',
+  'simplify',
+  'update-config',
+] as const;
+
 /**
  * Stale-session detection. Matches Claude Code's error text when a
  * resumed session can't be found — missing transcript .jsonl, unknown
@@ -308,6 +324,11 @@ export class ClaudeProvider implements AgentProvider {
         allowDangerouslySkipPermissions: true,
         settingSources: ['user'],
         skills: this.allowedSkills,
+        // Turn off built-in skills at the flag-settings layer (highest priority).
+        // This applies even to resumed sessions where `skills` init doesn't re-run.
+        settings: this.allowedSkills
+          ? { skillOverrides: Object.fromEntries(CLAUDE_CODE_BUILTIN_SKILLS.map((n) => [n, 'off' as const])) }
+          : undefined,
         mcpServers: this.mcpServers,
         hooks: {
           PreToolUse: [{ hooks: [preToolUseHook] }],
