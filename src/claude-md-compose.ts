@@ -26,6 +26,7 @@ import type { AgentGroup } from './types.js';
 // dance instead of existsSync), valid inside the container via RO mounts.
 const SHARED_CLAUDE_MD_CONTAINER_PATH = '/app/CLAUDE.md';
 const SHARED_SKILLS_CONTAINER_BASE = '/app/skills';
+const AGENT_SKILLS_CONTAINER_BASE = '/app/agent-skills';
 const SHARED_MCP_TOOLS_CONTAINER_BASE = '/app/src/mcp-tools';
 
 // Host-side source paths used to discover fragment sources at compose time.
@@ -57,16 +58,31 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
   const config = readContainerConfig(group.folder);
   const desired = new Map<string, { type: 'symlink' | 'inline'; content: string }>();
 
-  // Skill fragments — every skill that ships an `instructions.md`.
-  // TODO (shared-source refactor): respect `container.json` skill selection.
+  // Container skill fragments — only for skills enabled by this group's config.
   const skillsHostDir = path.join(process.cwd(), 'container', 'skills');
   if (fs.existsSync(skillsHostDir)) {
-    for (const skillName of fs.readdirSync(skillsHostDir)) {
+    const enabledSkills =
+      config.skills === 'all' ? fs.readdirSync(skillsHostDir) : config.skills;
+    for (const skillName of enabledSkills) {
       const hostFragment = path.join(skillsHostDir, skillName, 'instructions.md');
       if (fs.existsSync(hostFragment)) {
         desired.set(`skill-${skillName}.md`, {
           type: 'symlink',
           content: `${SHARED_SKILLS_CONTAINER_BASE}/${skillName}/instructions.md`,
+        });
+      }
+    }
+  }
+
+  // Agent skill fragments — opt-in skills from `agent-skills/`.
+  const agentSkillsHostDir = path.join(process.cwd(), 'agent-skills');
+  if (fs.existsSync(agentSkillsHostDir)) {
+    for (const skillName of config.agentSkills ?? []) {
+      const hostFragment = path.join(agentSkillsHostDir, skillName, 'instructions.md');
+      if (fs.existsSync(hostFragment)) {
+        desired.set(`agent-skill-${skillName}.md`, {
+          type: 'symlink',
+          content: `${AGENT_SKILLS_CONTAINER_BASE}/${skillName}/instructions.md`,
         });
       }
     }

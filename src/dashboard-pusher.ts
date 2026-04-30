@@ -17,6 +17,7 @@ import { getUserRoles, getAdminsOfAgentGroup } from './modules/permissions/db/us
 import { getUserDmsForUser } from './modules/permissions/db/user-dms.js';
 import { getActiveAdapters, getRegisteredChannelNames } from './channels/channel-registry.js';
 import { DATA_DIR, ASSISTANT_NAME } from './config.js';
+import { readContainerConfig } from './container-config.js';
 import { getDb } from './db/connection.js';
 import { log } from './log.js';
 
@@ -138,14 +139,56 @@ function collectSnapshot(): Record<string, unknown> {
     context_windows: collectContextWindows(),
     activity: collectActivity(),
     messages: collectMessages(),
+    skills: collectSkills(),
   };
+}
+
+function parseFrontmatter(content: string): Record<string, string> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+  const result: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+    result[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+  }
+  return result;
+}
+
+function collectSkills() {
+  const skillDirs = [
+    { dir: path.resolve(process.cwd(), '.claude', 'skills'), type: 'host' as const },
+    { dir: path.resolve(process.cwd(), 'container', 'skills'), type: 'container' as const },
+    { dir: path.resolve(process.cwd(), 'agent-skills'), type: 'agent' as const },
+  ];
+  const skills: Array<{ name: string; description: string; folder: string; type: 'host' | 'container' | 'agent' }> = [];
+
+  for (const { dir, type } of skillDirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const skillMd = path.join(dir, entry.name, 'SKILL.md');
+      if (!fs.existsSync(skillMd)) continue;
+      try {
+        const fm = parseFrontmatter(fs.readFileSync(skillMd, 'utf-8'));
+        skills.push({ name: fm.name || entry.name, description: fm.description || '', folder: entry.name, type });
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function collectAgentGroups() {
   return getAllAgentGroups().map((g) => {
     const sessions = getSessionsByAgentGroup(g.id);
     const running = sessions.filter((s) => s.container_status === 'running' || s.container_status === 'idle');
-    const destinations = getDestinations(g.id);
+    const destinations = getDestinations(g.id).map((d) => ({
+      ...d,
+      target_name: d.target_type === 'agent' ? (getAgentGroup(d.target_id)?.name ?? null) : null,
+    }));
     const members = getMembers(g.id).map((m) => {
       const user = getUser(m.user_id);
       return { ...m, display_name: user?.display_name ?? null };
@@ -166,6 +209,8 @@ function collectAgentGroups() {
       )
       .all(g.id) as Array<Record<string, unknown>>;
 
+    const containerCfg = readContainerConfig(g.folder);
+
     return {
       id: g.id,
       name: g.name,
@@ -177,6 +222,7 @@ function collectAgentGroups() {
       destinations,
       members,
       admins,
+      agentSkills: containerCfg.agentSkills,
       created_at: g.created_at,
     };
   });
@@ -408,6 +454,7 @@ function collectContextWindows() {
   const results: unknown[] = [];
   const agentGroups = getAllAgentGroups();
   const nameMap = new Map(agentGroups.map((g) => [g.id, g.name]));
+  const folderMap = new Map(agentGroups.map((g) => [g.id, g.folder]));
 
   for (const agDir of fs.readdirSync(sessionsDir).filter((d) => d.startsWith('ag-'))) {
     const claudeDir = path.join(sessionsDir, agDir, '.claude-shared', 'projects');
@@ -448,7 +495,9 @@ function collectContextWindows() {
           const u = r.message.usage;
           const model = r.message.model || 'unknown';
           const ctx = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-          const max = 200000;
+          const folder = folderMap.get(agDir);
+          const containerCfg = folder ? readContainerConfig(folder) : null;
+          const max = containerCfg?.autoCompactWindow ?? 200000;
           results.push({
             agentGroupId: agDir,
             agentGroupName: nameMap.get(agDir),

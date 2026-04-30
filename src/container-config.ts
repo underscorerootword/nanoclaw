@@ -37,6 +37,8 @@ export interface ContainerConfig {
   additionalMounts: AdditionalMountConfig[];
   /** Which skills to enable — array of skill names or "all" (default). */
   skills: string[] | 'all';
+  /** Agent-specific skills from `agent-skills/` — opt-in only, default none. */
+  agentSkills: string[];
   /** Agent provider name (e.g. "claude", "opencode"). Default: "claude". */
   provider?: string;
   /** Agent group display name (used in transcript archiving). */
@@ -61,6 +63,7 @@ function emptyConfig(): ContainerConfig {
     packages: { apt: [], npm: [] },
     additionalMounts: [],
     skills: 'all',
+    agentSkills: [],
   };
 }
 
@@ -88,6 +91,7 @@ export function readContainerConfig(folder: string): ContainerConfig {
       imageTag: raw.imageTag,
       additionalMounts: raw.additionalMounts ?? [],
       skills: raw.skills ?? 'all',
+      agentSkills: raw.agentSkills ?? [],
       provider: raw.provider,
       groupName: raw.groupName,
       assistantName: raw.assistantName,

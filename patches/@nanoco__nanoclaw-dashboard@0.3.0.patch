@@ -1,0 +1,191 @@
+diff --git a/dist/router.js b/dist/router.js
+index 326434d184af3d5496de61b07c79bca0ceff7e7f..c4cec50777f6cabd4d6de401ba9e809358a0633f 100644
+--- a/dist/router.js
++++ b/dist/router.js
+@@ -6,6 +6,7 @@ import { channelsPage } from './ui/pages/channels.js';
+ import { messagesPage } from './ui/pages/messages.js';
+ import { usersPage } from './ui/pages/users.js';
+ import { logsPage } from './ui/pages/logs.js';
++import { skillsPage } from './ui/pages/skills.js';
+ function json(res, data, status = 200) {
+     res.writeHead(status, { 'Content-Type': 'application/json' });
+     res.end(JSON.stringify(data));
+@@ -114,6 +115,11 @@ export async function dispatch(method, path, params, res) {
+             return json(res, { error: 'No data yet' }, 503);
+         return json(res, { sessions: s.context_windows });
+     }
++    if (method === 'GET' && path === '/api/skills') {
++        if (!s)
++            return json(res, { error: 'No data yet' }, 503);
++        return json(res, s.skills || []);
++    }
+     // --- HTML pages ---
+     if (method === 'GET') {
+         if (path === '/dashboard')
+@@ -130,6 +136,8 @@ export async function dispatch(method, path, params, res) {
+             return html(res, usersPage());
+         if (path === '/dashboard/logs')
+             return html(res, logsPage());
++        if (path === '/dashboard/skills')
++            return html(res, skillsPage());
+         if (path === '/') {
+             res.writeHead(302, { Location: '/dashboard' });
+             res.end();
+diff --git a/dist/ui/layout.js b/dist/ui/layout.js
+index 36b957573fba3d5046e9b50f844aefb9fde486e8..5f5d08ebb8e9e22897ef87c3ef631110e70a7753 100644
+--- a/dist/ui/layout.js
++++ b/dist/ui/layout.js
+@@ -11,6 +11,7 @@ const NAV_ITEMS = [
+     { href: '/dashboard/messages', label: 'Messages', icon: '&#9993;' },
+     { href: '/dashboard/users', label: 'Users', icon: '&#9679;' },
+     { href: '/dashboard/logs', label: 'Logs', icon: '&#9776;' },
++    { href: '/dashboard/skills', label: 'Skills', icon: '&#9881;' },
+ ];
+ const CSS = `
+   * { margin: 0; padding: 0; box-sizing: border-box; }
+diff --git a/dist/ui/pages/agent-groups.js b/dist/ui/pages/agent-groups.js
+index 0c33db833aafdcf9d7292c670bad41fbf8bcc1d7..dec591bc66b2117688bd7b29ae0bfa1776a504ac 100644
+--- a/dist/ui/pages/agent-groups.js
++++ b/dist/ui/pages/agent-groups.js
+@@ -24,14 +24,22 @@ export function agentGroupsPage() {
+           return;
+         }
+         document.getElementById('content').innerHTML =
+-          '<table><tr><th>Name</th><th>Folder</th><th>Sessions</th><th>Running</th><th>Created</th></tr>' +
+-          groups.map(g =>
+-            '<tr><td><a href="/dashboard/agent-groups?id=' + esc(g.id) + '">' + esc(g.name) + '</a></td>' +
+-            '<td>' + esc(g.folder) + '</td>' +
+-            '<td>' + g.sessionCount + '</td>' +
+-            '<td>' + (g.runningSessions > 0 ? badge(g.runningSessions, 'green') : badge('0', 'gray')) + '</td>' +
+-            '<td style="color:#666">' + esc(g.created_at) + '</td></tr>'
+-          ).join('') + '</table>';
++          '<table><tr><th>Name</th><th>Folder</th><th>Sessions</th><th>Running</th><th>Connections</th><th>Created</th></tr>' +
++          groups.map(g => {
++            const agentDests = (g.destinations || []).filter(d => d.target_type === 'agent');
++            const connHtml = agentDests.length === 0
++              ? '<span style="color:#999">—</span>'
++              : agentDests.map(d =>
++                  '<a href="/dashboard/agent-groups?id=' + esc(d.target_id) + '" style="margin-right:6px">' +
++                  esc(d.target_name || truncId(d.target_id, 20)) + '</a>'
++                ).join('');
++            return '<tr><td><a href="/dashboard/agent-groups?id=' + esc(g.id) + '">' + esc(g.name) + '</a></td>' +
++              '<td>' + esc(g.folder) + '</td>' +
++              '<td>' + g.sessionCount + '</td>' +
++              '<td>' + (g.runningSessions > 0 ? badge(g.runningSessions, 'green') : badge('0', 'gray')) + '</td>' +
++              '<td>' + connHtml + '</td>' +
++              '<td style="color:#666">' + esc(g.created_at) + '</td></tr>';
++          }).join('') + '</table>';
+       } catch (e) {
+         document.getElementById('content').innerHTML = '<div class="loading">Error: ' + esc(e.message) + '</div>';
+       }
+@@ -96,7 +104,10 @@ export function agentGroupsPage() {
+         if (data.destinations.length > 0) {
+           html += '<table><tr><th>Name</th><th>Type</th><th>Target</th></tr>';
+           for (const d of data.destinations) {
+-            html += '<tr><td>' + esc(d.local_name) + '</td><td>' + badge(d.target_type, d.target_type === 'channel' ? 'blue' : 'purple') + '</td><td style="font-size:11px" title="' + esc(d.target_id) + '">' + esc(truncId(d.target_id, 30)) + '</td></tr>';
++            const targetCell = (d.target_type === 'agent' && d.target_name)
++              ? '<a href="/dashboard/agent-groups?id=' + esc(d.target_id) + '">' + esc(d.target_name) + '</a>'
++              : '<span style="font-size:11px" title="' + esc(d.target_id) + '">' + esc(truncId(d.target_id, 30)) + '</span>';
++            html += '<tr><td>' + esc(d.local_name) + '</td><td>' + badge(d.target_type, d.target_type === 'channel' ? 'blue' : 'purple') + '</td><td>' + targetCell + '</td></tr>';
+           }
+           html += '</table>';
+         }
+diff --git a/dist/ui/pages/skills.d.ts b/dist/ui/pages/skills.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..763e538b044e96ec9f9d91ccfcc4b4ae11761d62
+--- /dev/null
++++ b/dist/ui/pages/skills.d.ts
+@@ -0,0 +1 @@
++export declare function skillsPage(): string;
+diff --git a/dist/ui/pages/skills.js b/dist/ui/pages/skills.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1f2a5940fca166e84f47288195c2aa53ea18cb5
+--- /dev/null
++++ b/dist/ui/pages/skills.js
+@@ -0,0 +1,86 @@
++import { layout } from '../layout.js';
++export function skillsPage() {
++    return layout('Skills', '/dashboard/skills', `
++    <h2 class="page-title">Skills</h2>
++    <div id="content"><div class="loading">Loading...</div></div>
++    <script>
++    (async () => {
++      try {
++        const [skills, agentGroups] = await Promise.all([
++          api('/api/skills'),
++          api('/api/agent-groups'),
++        ]);
++
++        if (!skills || skills.length === 0) {
++          document.getElementById('content').innerHTML = '<div class="loading">No skills installed</div>';
++          return;
++        }
++
++        const agentSkillsList = skills.filter(s => s.type === 'agent');
++        const container = skills.filter(s => s.type === 'container');
++        const host = skills.filter(s => s.type === 'host');
++
++        // Build a map of agent skill name → groups that have it assigned
++        const skillGroups = {};
++        for (const g of (agentGroups || [])) {
++          for (const skillName of (g.agentSkills || [])) {
++            if (!skillGroups[skillName]) skillGroups[skillName] = [];
++            skillGroups[skillName].push(g.name || g.id);
++          }
++        }
++
++        let html = '';
++
++        if (agentSkillsList.length > 0) {
++          html += '<h3 class="section-title">Agent Skills (' + agentSkillsList.length + ')</h3>';
++          html += '<table><tr><th>Name</th><th>Description</th><th>Assigned To</th></tr>';
++          for (const s of agentSkillsList) {
++            const groups = skillGroups[s.name] || [];
++            const groupsHtml = groups.length > 0
++              ? groups.map(g => '<span class="badge badge-blue">' + esc(g) + '</span>').join(' ')
++              : '<span style="color:#555">none</span>';
++            html += '<tr>' +
++              '<td><code style="font-family:monospace;font-size:12px;color:#4ade80">/' + esc(s.name) + '</code></td>' +
++              '<td style="color:#ccc">' + esc(s.description || '—') + '</td>' +
++              '<td>' + groupsHtml + '</td>' +
++              '</tr>';
++          }
++          html += '</table>';
++        }
++
++        if (container.length > 0) {
++          html += '<h3 class="section-title">Container Skills (' + container.length + ')</h3>';
++          html += '<table><tr><th>Name</th><th>Description</th></tr>';
++          for (const s of container) {
++            html += '<tr>' +
++              '<td><code style="font-family:monospace;font-size:12px;color:#c084fc">/' + esc(s.name) + '</code></td>' +
++              '<td style="color:#ccc">' + esc(s.description || '—') + '</td>' +
++              '</tr>';
++          }
++          html += '</table>';
++        }
++
++        if (host.length > 0) {
++          html += '<h3 class="section-title">Host Skills (' + host.length + ')</h3>';
++          html += '<table><tr><th>Name</th><th>Description</th></tr>';
++          for (const s of host) {
++            html += '<tr>' +
++              '<td><code style="font-family:monospace;font-size:12px;color:#7eb8da">/' + esc(s.name) + '</code></td>' +
++              '<td style="color:#ccc">' + esc(s.description || '—') + '</td>' +
++              '</tr>';
++          }
++          html += '</table>';
++        }
++
++        if (!html) {
++          html = '<div class="loading">No skills installed</div>';
++        }
++
++        document.getElementById('content').innerHTML = html;
++      } catch (e) {
++        document.getElementById('content').innerHTML = '<div class="loading">Error: ' + esc(e.message) + '</div>';
++      }
++    })();
++    </script>
++  `);
++}

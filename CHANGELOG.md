@@ -11,6 +11,16 @@ For detailed release notes, see the [full changelog on the documentation site](h
 Changes made to this install relative to the upstream base. Most recent first.
 DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
 
+### 2026-04-28 — poll-loop: heartbeat now updated during API retry windows
+
+**Problem:** `touchHeartbeat()` in `processQuery` was only called on incoming streaming events from the SDK. When the Claude API was degraded and the SDK retried silently (no events emitted during the backoff window), the heartbeat file went stale. The host sweep then killed the container at the 30-minute absolute ceiling, even though the container was legitimately waiting for the API to recover.
+
+**Fix:** Added `touchHeartbeat()` to the `pollHandle` setInterval inside `processQuery` (`container/agent-runner/src/poll-loop.ts`). This interval runs every 500ms concurrently with the streaming loop, so the heartbeat stays alive regardless of whether the SDK is emitting events or sitting silently through a retry.
+
+**Files:** `container/agent-runner/src/poll-loop.ts`
+
+---
+
 ### 2026-04-28 — Matrix: room-based inbound routing
 
 **Problem:** Both A1-O1 and A1-O2 were wired to a single handle-based messaging group (`@upgrade0999`). A message sent to A1-O2's dedicated room was normalised to the user handle by `channelIdFromThreadId`, then fanned out to both agents — so A1-O1 also responded.
