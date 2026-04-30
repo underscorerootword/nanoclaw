@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createMatrixAdapter } from '@beeper/chat-adapter-matrix';
+import { createClient as mkMatrixClient, type ICreateClientOpts } from 'matrix-js-sdk';
 
 import { log } from '../log.js';
 import { readEnvFile } from '../env.js';
@@ -404,6 +405,12 @@ function registerMatrixAdapter(adapterName: string, envPrefix: string, groupFold
           // Each instance gets its own persistence namespace so sync state,
           // session tokens, and DM caches don't bleed across bot accounts.
           persistence: { keyPrefix: adapterName },
+          // Explicit server-side long-poll timeout (default is 30s, but be clear).
+          sync: { pollTimeout: 30_000 },
+          // Client-side HTTP abort: if the server hasn't responded in 60s, cut the
+          // connection and retry. Without this, half-open TCP connections hang
+          // indefinitely (observed: 646s before OS-level abort).
+          createClient: (opts) => mkMatrixClient({ ...opts, localTimeoutMs: 60_000 } as ICreateClientOpts),
         }),
         groupFolder,
       );
