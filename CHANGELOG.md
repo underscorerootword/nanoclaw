@@ -11,6 +11,29 @@ For detailed release notes, see the [full changelog on the documentation site](h
 Changes made to this install relative to the upstream base. Most recent first.
 DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
 
+### 2026-04-30 — Agent skill isolation: block host skills from container agents
+
+**Problem:** Agents were seeing and reporting host-level NanoClaw skills (`add-discord`, `setup`, `debug`, etc.) and Claude Code built-in skills (`update-config`, `loop`, `schedule`, etc.) instead of only their container skills and configured agent skills.
+
+**Root cause:** The Claude SDK was configured with `settingSources: ['project', 'user']`. The `'project'` source resolved to `/workspace/agent/.claude/` — which maps to `groups/<folder>/.claude/` on the host and had been populated with all host skills by prior Claude Code runs. Additionally, Claude Code's binary built-in skills were never filtered.
+
+**Fixes:**
+
+1. **Removed `'project'` from `settingSources`** — container agents no longer load settings (including skills) from the host project filesystem. Only the `'user'` source (`/home/node/.claude/`, the isolated `.claude-shared/` mount) is used.
+
+2. **Added skill allowlist** — container agents are now explicitly passed only the skills present in `/app/skills/`, `/app/agent-skills/`, and `/workspace/agent/skills/`. This suppresses filesystem-discovered host skills.
+
+3. **Disabled Claude Code built-in skills** — built-in skills bundled in the Claude Code binary (`update-config`, `loop`, `schedule`, `review`, `security-review`, `simplify`, `claude-api`, `fewer-permission-prompts`, `init`, `keybindings-help`) are turned off at the flag-settings layer via `skillOverrides`.
+
+4. **Injected authoritative skill list into system prompt** — Claude Code only injects a `skill_listing` once at session initialization; resumed sessions receive incremental tool updates, not a fresh listing. The correct current skills are now appended to the system prompt on every turn so the agent always reports its actual skills, even in long-running sessions with stale conversation history.
+
+**One-time cleanup:** Remove any stale `groups/*/.claude/skills/` directories that accumulated from host Claude Code runs:
+```bash
+for d in groups/*/.claude/skills; do [ -d "$d" ] && rm -rf "$d" && echo "removed $d"; done
+```
+
+**Files:** `container/agent-runner/src/providers/claude.ts`, `container/agent-runner/src/providers/types.ts`, `container/agent-runner/src/index.ts`, `container/agent-runner/package.json`
+
 ### 2026-04-28 — Agent-specific skills and dashboard Skills page
 
 **Agent skills (`agent-skills/`):** New skill tier between container skills (global) and host skills (operator-only). Skills placed in `agent-skills/<name>/` are never available by default — each agent group opts in via `"agentSkills": ["name"]` in its `container.json`. A skill can be assigned to multiple groups without duplication. At spawn, the `agent-skills/` directory is mounted RO at `/app/agent-skills`, symlinks are created in `.claude-shared/skills/`, and any `instructions.md` is included in the composed `CLAUDE.md` as `agent-skill-<name>.md` fragments.
