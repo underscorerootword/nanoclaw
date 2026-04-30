@@ -27,6 +27,8 @@ export interface ProviderOptions {
   additionalDirectories?: string[];
   /** Override the provider's default auto-compact context window (tokens). */
   autoCompactWindow?: number;
+  /** Explicit skill allowlist. When set, only these skills appear in the session. Suppresses built-ins. */
+  allowedSkills?: string[];
 }
 
 export interface QueryInput {
