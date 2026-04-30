@@ -86,12 +86,41 @@ async function main(): Promise<void> {
     log(`Additional MCP server: ${name} (${serverConfig.command})`);
   }
 
+  // Build explicit skill allowlist: container skills + agent skills + workspace skills.
+  // Passing this to the provider suppresses Claude Code's built-in skills from the listing.
+  const allowedSkills: string[] = [];
+  for (const dir of ['/app/skills', '/app/agent-skills']) {
+    if (fs.existsSync(dir)) {
+      for (const entry of fs.readdirSync(dir)) {
+        try {
+          if (fs.statSync(path.join(dir, entry)).isDirectory()) allowedSkills.push(entry);
+        } catch {
+          /* skip unreadable entries */
+        }
+      }
+    }
+  }
+  const workspaceSkillsDir = path.join(CWD, 'skills');
+  if (fs.existsSync(workspaceSkillsDir)) {
+    for (const entry of fs.readdirSync(workspaceSkillsDir)) {
+      try {
+        if (fs.statSync(path.join(workspaceSkillsDir, entry)).isDirectory()) allowedSkills.push(entry);
+      } catch {
+        /* skip unreadable entries */
+      }
+    }
+  }
+  if (allowedSkills.length > 0) {
+    log(`Allowed skills: ${allowedSkills.join(', ')}`);
+  }
+
   const provider = createProvider(providerName, {
     assistantName: config.assistantName || undefined,
     mcpServers,
     env: { ...process.env },
     additionalDirectories: additionalDirectories.length > 0 ? additionalDirectories : undefined,
     autoCompactWindow: config.autoCompactWindow,
+    allowedSkills: allowedSkills.length > 0 ? allowedSkills : undefined,
   });
 
   await runPollLoop({
