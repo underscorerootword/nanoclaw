@@ -11,6 +11,30 @@ For detailed release notes, see the [full changelog on the documentation site](h
 Changes made to this install relative to the upstream base. Most recent first.
 DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
 
+### 2026-05-01 — Matrix Alerts room for Anthropic API delay notifications
+
+**Problem:** When the Anthropic API was degraded, agents retried silently for up to 81 minutes with no operator visibility. The only signal was a belated response appearing long after the original message.
+
+**Fix:** Two-part implementation:
+
+1. **Container side** (`container/agent-runner/src/poll-loop.ts`, `container/agent-runner/src/db/session-state.ts`): When the SDK emits a retryable error event, the poll-loop writes the first-retry ISO timestamp to `session_state` in `outbound.db` (`api_retry_at`). Cleared on turn completion or any exit path.
+
+2. **Host side** (`src/host-sweep.ts`, `src/alerts.ts`, `src/db/session-db.ts`): The 60s host sweep reads `api_retry_at` from each session's `outbound.db`. If the value is older than 3 minutes and no alert has been sent this run, it delivers a warning directly to `MATRIX_ALERTS_ROOM_ID` via the Matrix adapter — no agent container or Anthropic API call involved. A resolved message is sent when the key clears.
+
+**Setup:** Create a dedicated Matrix room, invite `@a1-o1` (the primary Matrix bot), then add to `.env`:
+```
+MATRIX_ALERTS_ROOM_ID=!<room-id>:chat.rootword.cc
+```
+
+**Caveats:**
+- Alert threshold is 3 minutes (constant `API_RETRY_ALERT_THRESHOLD_MS` in `host-sweep.ts`).
+- `alerted­Sessions` is an in-memory set — a host restart during a retry window will re-send the alert on the next sweep tick after the threshold elapses again.
+- `MATRIX_ALERTS_ROOM_ID` must be read via `readEnvFile` (not `process.env`) — NanoClaw does not auto-load `.env` into the process environment.
+
+**Files:** `src/alerts.ts` (new), `src/host-sweep.ts`, `src/db/session-db.ts`, `container/agent-runner/src/poll-loop.ts`, `container/agent-runner/src/db/session-state.ts`
+
+---
+
 ### 2026-04-28 — poll-loop: heartbeat now updated during API retry windows
 
 **Problem:** `touchHeartbeat()` in `processQuery` was only called on incoming streaming events from the SDK. When the Claude API was degraded and the SDK retried silently (no events emitted during the backoff window), the heartbeat file went stale. The host sweep then killed the container at the 30-minute absolute ceiling, even though the container was legitimately waiting for the API to recover.
