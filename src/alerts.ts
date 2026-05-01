@@ -23,8 +23,13 @@ async function sendToAlertsRoom(text: string): Promise<void> {
     return;
   }
 
+  // Matrix adapter's decodeThreadId expects "matrix:<url-encoded-room-id>".
+  // A raw "!room:server" string fails to decode, falls into the user-handle
+  // path, and silently no-ops. Encode it so the adapter routes correctly.
+  const encodedRoomId = `matrix:${encodeURIComponent(roomId)}`;
+
   try {
-    await adapter.deliver(roomId, null, { kind: 'chat', content: { text } });
+    await adapter.deliver(encodedRoomId, null, { kind: 'chat', content: { text } });
   } catch (err) {
     log.error('Alerts: failed to deliver alert to Matrix room', {
       roomId,
