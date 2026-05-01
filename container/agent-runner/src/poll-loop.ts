@@ -2,7 +2,13 @@ import { findByName, getAllDestinations, type DestinationEntry } from './destina
 import { getPendingMessages, markProcessing, markCompleted, type MessageInRow } from './db/messages-in.js';
 import { writeMessageOut } from './db/messages-out.js';
 import { touchHeartbeat, clearStaleProcessingAcks } from './db/connection.js';
-import { clearContinuation, migrateLegacyContinuation, setContinuation } from './db/session-state.js';
+import {
+  clearContinuation,
+  migrateLegacyContinuation,
+  setContinuation,
+  setApiRetryState,
+  clearApiRetryState,
+} from './db/session-state.js';
 import {
   formatMessages,
   extractRouting,
@@ -320,6 +326,7 @@ async function processQuery(
         // follow-up pushes. The agent may have responded via MCP
         // (send_message) mid-turn, or the message may not need a response
         // at all — either way the turn is finished.
+        clearApiRetryState();
         markCompleted(initialBatchIds);
         if (event.text) {
           dispatchResultText(event.text, routing);
@@ -329,6 +336,7 @@ async function processQuery(
   } finally {
     done = true;
     clearInterval(pollHandle);
+    clearApiRetryState();
   }
 
   return { continuation: queryContinuation };
@@ -346,6 +354,9 @@ function handleEvent(event: ProviderEvent, _routing: RoutingContext): void {
       log(
         `Error: ${event.message} (retryable: ${event.retryable}${event.classification ? `, ${event.classification}` : ''})`,
       );
+      if (event.retryable) {
+        setApiRetryState(new Date().toISOString());
+      }
       break;
     case 'progress':
       log(`Progress: ${event.message}`);

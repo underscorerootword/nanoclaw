@@ -207,6 +207,22 @@ export function getContainerState(outDb: Database.Database): ContainerState | nu
   }
 }
 
+/**
+ * Read the ISO timestamp at which the container first entered an API retry
+ * window. Returns null when the container is not retrying or the key is absent
+ * (older session DBs that predate this feature).
+ */
+export function getApiRetryState(outDb: Database.Database): string | null {
+  try {
+    const row = outDb.prepare("SELECT value FROM session_state WHERE key = 'api_retry_at'").get() as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // messages_out (read-only from host)
 // ---------------------------------------------------------------------------

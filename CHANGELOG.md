@@ -35,7 +35,6 @@ Also fixed an existing TODO: container skill `instructions.md` fragments now res
 **Files:** `src/container-config.ts`, `src/container-runner.ts`, `src/claude-md-compose.ts`, `src/dashboard-pusher.ts`, dashboard package patch (`patches/@nanoco__nanoclaw-dashboard@0.3.0.patch`)
 
 ---
-
 ### 2026-04-28 — Matrix: room-based inbound routing
 
 **Problem:** Both A1-O1 and A1-O2 were wired to a single handle-based messaging group (`@upgrade0999`). A message sent to A1-O2's dedicated room was normalised to the user handle by `channelIdFromThreadId`, then fanned out to both agents — so A1-O1 also responded.

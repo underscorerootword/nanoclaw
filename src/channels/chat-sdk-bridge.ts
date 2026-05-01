@@ -325,13 +325,18 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
               listenerPromise
                 .then(() => {
                   if (!gatewayAbort?.signal.aborted) {
-                    log.info('Gateway listener expired, restarting', { adapter: adapter.name });
+                    log.info('Gateway listener expired, restarting', {
+                      adapter: adapter.name,
+                    });
                     startGateway();
                   }
                 })
                 .catch((err) => {
                   if (!gatewayAbort?.signal.aborted) {
-                    log.error('Gateway listener error, restarting in 5s', { adapter: adapter.name, err });
+                    log.error('Gateway listener error, restarting in 5s', {
+                      adapter: adapter.name,
+                      err,
+                    });
                     setTimeout(startGateway, 5000);
                   }
                 });
@@ -387,7 +392,9 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
         const title = content.title as string;
         const question = content.question as string;
         if (!title) {
-          log.error('ask_question missing required title — skipping delivery', { questionId });
+          log.error('ask_question missing required title — skipping delivery', {
+            questionId,
+          });
           return;
         }
         const options: NormalizedOption[] = normalizeOptions(content.options as never);
@@ -402,7 +409,11 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
               // well past that. The onAction handlers resolve the index back
               // to the real value via getAskQuestionRender(questionId).
               options.map((opt, idx) =>
-                Button({ id: `ncq:${questionId}:${idx}`, label: opt.label, value: String(idx) }),
+                Button({
+                  id: `ncq:${questionId}:${idx}`,
+                  label: opt.label,
+                  value: String(idx),
+                }),
               ),
             ),
           ],
@@ -446,7 +457,10 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
           data: f.data,
           filename: f.filename,
         }));
-        const result = await adapter.postMessage(tid, { markdown: '', files: fileUploads });
+        const result = await adapter.postMessage(tid, {
+          markdown: '',
+          files: fileUploads,
+        });
         return result?.id;
       }
     },

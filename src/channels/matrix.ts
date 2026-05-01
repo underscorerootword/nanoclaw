@@ -197,7 +197,11 @@ function wrapWithDmResolution(adapter: ReturnType<typeof createMatrixAdapter>, g
       if (config.rooms[userHandle] === roomId) return; // already saved
       config.rooms[userHandle] = roomId;
       saveMatrixConfig(groupFolder, config);
-      log.info('Matrix: persisted room mapping to matrix.yaml', { groupFolder, userHandle, roomId });
+      log.info('Matrix: persisted room mapping to matrix.yaml', {
+        groupFolder,
+        userHandle,
+        roomId,
+      });
     } catch (err) {
       log.warn('Matrix: failed to persist room mapping', { err });
     }

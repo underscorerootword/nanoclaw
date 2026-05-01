@@ -28,9 +28,10 @@ function now() {
 }
 
 /** Create a mock ChannelAdapter for testing. */
-function createMockAdapter(
-  channelType: string,
-): ChannelAdapter & { delivered: OutboundMessage[]; inbound: InboundMessage[] } {
+function createMockAdapter(channelType: string): ChannelAdapter & {
+  delivered: OutboundMessage[];
+  inbound: InboundMessage[];
+} {
   const delivered: OutboundMessage[] = [];
   const inbound: InboundMessage[] = [];
   let setupConfig: ChannelSetup | null = null;
@@ -169,7 +170,12 @@ describe('channel + router integration', () => {
     const { inboundDbPath } = await import('../session-manager.js');
 
     // Simulate what the adapter bridge does: stringify content, call routeInbound
-    const inboundContent = { sender: 'TestUser', senderId: 'u1', text: 'Hello from adapter', isFromMe: false };
+    const inboundContent = {
+      sender: 'TestUser',
+      senderId: 'u1',
+      text: 'Hello from adapter',
+      isFromMe: false,
+    };
 
     await routeInbound({
       channelType: 'mock',
@@ -189,7 +195,10 @@ describe('channel + router integration', () => {
 
     const dbPath = inboundDbPath('ag-1', session!.id);
     const db = new Database(dbPath);
-    const rows = db.prepare('SELECT * FROM messages_in').all() as Array<{ id: string; content: string }>;
+    const rows = db.prepare('SELECT * FROM messages_in').all() as Array<{
+      id: string;
+      content: string;
+    }>;
     db.close();
 
     expect(rows).toHaveLength(1);
@@ -219,14 +228,20 @@ describe('channel + router integration', () => {
       async deliver(channelType, platformId, threadId, kind, content) {
         const adapter = getChannelAdapter(channelType);
         if (!adapter) return undefined;
-        return adapter.deliver(platformId, threadId, { kind, content: JSON.parse(content) });
+        return adapter.deliver(platformId, threadId, {
+          kind,
+          content: JSON.parse(content),
+        });
       },
     });
 
     // Simulate delivery
     const adapter = getChannelAdapter('mock');
     if (adapter) {
-      await adapter.deliver('chan-100', null, { kind: 'chat', content: { text: 'Agent response' } });
+      await adapter.deliver('chan-100', null, {
+        kind: 'chat',
+        content: { text: 'Agent response' },
+      });
     }
 
     expect(mockAdapter.delivered).toHaveLength(1);

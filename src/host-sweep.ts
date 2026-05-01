@@ -33,6 +33,7 @@ import { getActiveSessions } from './db/sessions.js';
 import { getAgentGroup } from './db/agent-groups.js';
 import {
   countDueMessages,
+  getApiRetryState,
   getContainerState,
   getMessageForRetry,
   getProcessingClaims,
@@ -44,6 +45,7 @@ import {
 import { log } from './log.js';
 import { openInboundDb, openOutboundDb, inboundDbPath, heartbeatPath } from './session-manager.js';
 import { isContainerRunning, killContainer, wakeContainer } from './container-runner.js';
+import { sendApiRetryAlert, sendApiRetryResolvedAlert } from './alerts.js';
 import type { Session } from './types.js';
 
 const SWEEP_INTERVAL_MS = 60_000;
@@ -56,6 +58,13 @@ export const ABSOLUTE_CEILING_MS = 30 * 60 * 1000;
 export const CLAIM_STUCK_MS = 60 * 1000;
 const MAX_TRIES = 5;
 const BACKOFF_BASE_MS = 5000;
+// Minimum time a container must be in an API retry window before we alert.
+const API_RETRY_ALERT_THRESHOLD_MS = 3 * 60 * 1000;
+
+// Sessions for which an API retry alert has already been sent this run.
+// Cleared when the retry resolves so a future retry on the same session
+// will produce a fresh alert.
+const alertedSessions = new Set<string>();
 
 export type StuckDecision =
   | { action: 'ok' }
@@ -189,6 +198,26 @@ async function sweepSession(session: Session): Promise<void> {
     const { handleRecurrence } = await import('./modules/scheduling/recurrence.js');
     await handleRecurrence(inDb, session);
     // MODULE-HOOK:scheduling-recurrence:end
+
+    // 6. API retry alert: notify the operator when a container has been stuck
+    // in an Anthropic API retry window longer than the threshold.
+    if (outDb) {
+      const retryAt = getApiRetryState(outDb);
+      if (retryAt && !alertedSessions.has(session.id)) {
+        const age = Date.now() - new Date(retryAt).getTime();
+        if (age >= API_RETRY_ALERT_THRESHOLD_MS) {
+          alertedSessions.add(session.id);
+          sendApiRetryAlert(agentGroup.name, retryAt).catch((err) =>
+            log.error('Failed to send API retry alert', { sessionId: session.id, err }),
+          );
+        }
+      } else if (!retryAt && alertedSessions.has(session.id)) {
+        alertedSessions.delete(session.id);
+        sendApiRetryResolvedAlert(agentGroup.name).catch((err) =>
+          log.error('Failed to send API retry resolved alert', { sessionId: session.id, err }),
+        );
+      }
+    }
   } finally {
     inDb.close();
     outDb?.close();
