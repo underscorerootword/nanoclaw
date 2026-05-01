@@ -8,9 +8,15 @@
  */
 import { log } from './log.js';
 import { getChannelAdapter } from './channels/channel-registry.js';
+import { readEnvFile } from './env.js';
+
+let alertsRoomIdCache: string | null | undefined;
 
 function getAlertsRoomId(): string | null {
-  return process.env.MATRIX_ALERTS_ROOM_ID ?? null;
+  if (alertsRoomIdCache !== undefined) return alertsRoomIdCache;
+  const env = readEnvFile(['MATRIX_ALERTS_ROOM_ID']);
+  alertsRoomIdCache = env.MATRIX_ALERTS_ROOM_ID ?? process.env.MATRIX_ALERTS_ROOM_ID ?? null;
+  return alertsRoomIdCache;
 }
 
 async function sendToAlertsRoom(text: string): Promise<void> {
