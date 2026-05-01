@@ -77,3 +77,15 @@ export function setContinuation(providerName: string, id: string): void {
 export function clearContinuation(providerName: string): void {
   deleteValue(continuationKey(providerName));
 }
+
+export function setApiRetryState(timestamp: string): void {
+  // Only set on first retry — preserve the original timestamp so the host
+  // can calculate how long the retry has been ongoing.
+  if (getValue('api_retry_at') === undefined) {
+    setValue('api_retry_at', timestamp);
+  }
+}
+
+export function clearApiRetryState(): void {
+  deleteValue('api_retry_at');
+}
