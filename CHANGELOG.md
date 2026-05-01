@@ -21,6 +21,20 @@ DB-only changes (messaging group wiring, session cleanup) are noted here but not
 
 ---
 
+### 2026-04-28 — Agent-specific skills and dashboard Skills page
+
+**Agent skills (`agent-skills/`):** New skill tier between container skills (global) and host skills (operator-only). Skills placed in `agent-skills/<name>/` are never available by default — each agent group opts in via `"agentSkills": ["name"]` in its `container.json`. A skill can be assigned to multiple groups without duplication. At spawn, the `agent-skills/` directory is mounted RO at `/app/agent-skills`, symlinks are created in `.claude-shared/skills/`, and any `instructions.md` is included in the composed `CLAUDE.md` as `agent-skill-<name>.md` fragments.
+
+Also fixed an existing TODO: container skill `instructions.md` fragments now respect the group's `skills` selection in `container.json` rather than always including all skills.
+
+**Caveats:**
+- The `agent-skills/` directory must be created manually at the project root — it is not created automatically.
+- Each skill directory must contain a file named exactly `SKILL.md` (not `<name>-SKILL.md` or any other variant) for the dashboard to detect it.
+- No restart needed when adding new skills — the pusher re-scans `agent-skills/` every 60 seconds.
+
+**Files:** `src/container-config.ts`, `src/container-runner.ts`, `src/claude-md-compose.ts`, `src/dashboard-pusher.ts`, dashboard package patch (`patches/@nanoco__nanoclaw-dashboard@0.3.0.patch`)
+
+---
 ### 2026-04-28 — Matrix: room-based inbound routing
 
 **Problem:** Both A1-O1 and A1-O2 were wired to a single handle-based messaging group (`@upgrade0999`). A message sent to A1-O2's dedicated room was normalised to the user handle by `channelIdFromThreadId`, then fanned out to both agents — so A1-O1 also responded.

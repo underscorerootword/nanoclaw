@@ -214,9 +214,9 @@ export function getContainerState(outDb: Database.Database): ContainerState | nu
  */
 export function getApiRetryState(outDb: Database.Database): string | null {
   try {
-    const row = outDb
-      .prepare("SELECT value FROM session_state WHERE key = 'api_retry_at'")
-      .get() as { value: string } | undefined;
+    const row = outDb.prepare("SELECT value FROM session_state WHERE key = 'api_retry_at'").get() as
+      | { value: string }
+      | undefined;
     return row?.value ?? null;
   } catch {
     return null;

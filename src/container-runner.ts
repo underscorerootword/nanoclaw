@@ -362,8 +362,11 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
   const agentSkillsDesired = containerConfig.agentSkills ?? [];
 
   // Build the full desired set (container skills + agent skills, no duplicates).
-  // Container skill wins if names collide (it gets /app/skills/ target).
+  // Agent skills are prefixed with their container path so stale-cleanup can
+  // tell the two apart even when names collide.
   const desiredSet = new Set(desired);
+  const agentDesiredSet = new Set(agentSkillsDesired);
+  // A name may appear in both; container skill wins (it gets /app/skills/ target).
   const allDesiredNames = new Set([...desired, ...agentSkillsDesired]);
 
   // Remove symlinks whose name is no longer in either desired set.

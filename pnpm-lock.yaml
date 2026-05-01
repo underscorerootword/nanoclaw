@@ -40,6 +40,9 @@ importers:
       kleur:
         specifier: ^4.1.5
         version: 4.1.5
+      matrix-js-sdk:
+        specifier: 41.3.0
+        version: 41.3.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.35.0

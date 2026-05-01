@@ -86,7 +86,10 @@ export async function initChannelAdapters(setupFn: (adapter: ChannelAdapter) => 
         }
       }
       activeAdapters.set(adapter.channelType, adapter);
-      log.info('Channel adapter started', { channel: name, type: adapter.channelType });
+      log.info('Channel adapter started', {
+        channel: name,
+        type: adapter.channelType,
+      });
     } catch (err) {
       log.error('Failed to start channel adapter', { channel: name, err });
     }

@@ -86,19 +86,84 @@ async function main(): Promise<void> {
     log(`Additional MCP server: ${name} (${serverConfig.command})`);
   }
 
+  // Build explicit skill allowlist: container skills + agent skills + workspace skills.
+  // Passing this to the provider suppresses Claude Code's built-in skills from the listing.
+  const allowedSkills: string[] = [];
+  for (const dir of ['/app/skills', '/app/agent-skills']) {
+    if (fs.existsSync(dir)) {
+      for (const entry of fs.readdirSync(dir)) {
+        try {
+          if (fs.statSync(path.join(dir, entry)).isDirectory()) allowedSkills.push(entry);
+        } catch {
+          /* skip unreadable entries */
+        }
+      }
+    }
+  }
+  const workspaceSkillsDir = path.join(CWD, 'skills');
+  if (fs.existsSync(workspaceSkillsDir)) {
+    for (const entry of fs.readdirSync(workspaceSkillsDir)) {
+      try {
+        if (fs.statSync(path.join(workspaceSkillsDir, entry)).isDirectory()) allowedSkills.push(entry);
+      } catch {
+        /* skip unreadable entries */
+      }
+    }
+  }
+  if (allowedSkills.length > 0) {
+    log(`Allowed skills: ${allowedSkills.join(', ')}`);
+  }
+
+  // Build a skill listing for the system prompt so the agent always sees the
+  // authoritative current list on every turn — including resumed sessions where
+  // Claude Code never re-injects a fresh skill_listing attachment.
+  let finalInstructions = instructions;
+  if (allowedSkills.length > 0) {
+    const seenSkills = new Set<string>();
+    const skillLines: string[] = [];
+    for (const dir of ['/app/skills', '/app/agent-skills', workspaceSkillsDir]) {
+      if (!fs.existsSync(dir)) continue;
+      for (const entry of fs.readdirSync(dir)) {
+        if (seenSkills.has(entry)) continue;
+        const skillDir = path.join(dir, entry);
+        try {
+          if (!fs.statSync(skillDir).isDirectory()) continue;
+          seenSkills.add(entry);
+          const skillMdPath = path.join(skillDir, 'SKILL.md');
+          if (!fs.existsSync(skillMdPath)) {
+            skillLines.push(`- /${entry}`);
+            continue;
+          }
+          const content = fs.readFileSync(skillMdPath, 'utf-8');
+          const match = content.match(/^---\n[\s\S]*?description:\s*(.+?)\n[\s\S]*?---/m);
+          const description = match ? match[1].trim() : '';
+          skillLines.push(description ? `- /${entry} — ${description}` : `- /${entry}`);
+        } catch {
+          /* skip unreadable skill */
+        }
+      }
+    }
+    if (skillLines.length > 0) {
+      const skillsSection =
+        `## Currently loaded skills\n\nThese are the ONLY skills available to you — do not reference any others:\n\n${skillLines.join('\n')}`;
+      finalInstructions = instructions ? `${instructions}\n\n${skillsSection}` : skillsSection;
+    }
+  }
+
   const provider = createProvider(providerName, {
     assistantName: config.assistantName || undefined,
     mcpServers,
     env: { ...process.env },
     additionalDirectories: additionalDirectories.length > 0 ? additionalDirectories : undefined,
     autoCompactWindow: config.autoCompactWindow,
+    allowedSkills: allowedSkills.length > 0 ? allowedSkills : undefined,
   });
 
   await runPollLoop({
     provider,
     providerName,
     cwd: CWD,
-    systemContext: { instructions },
+    systemContext: { instructions: finalInstructions },
   });
 }
 
