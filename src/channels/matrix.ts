@@ -414,7 +414,34 @@ function registerMatrixAdapter(adapterName: string, envPrefix: string, groupFold
           // Client-side HTTP abort: if the server hasn't responded in 60s, cut the
           // connection and retry. Without this, half-open TCP connections hang
           // indefinitely (observed: 646s before OS-level abort).
-          createClient: (opts) => mkMatrixClient({ ...opts, localTimeoutMs: 60_000 } as ICreateClientOpts),
+          //
+          // localTimeoutMs alone does not reliably abort /sync long-polls in
+          // matrix-js-sdk v41 — observed hangs of 9–18 min despite the 60s setting.
+          // fetchWithSyncWatchdog wraps fetch with an explicit AbortController on
+          // /sync endpoints only, capping the hang at 90s. Other requests are passed
+          // through unchanged (localTimeoutMs still applies to them via the SDK).
+          createClient: (opts) => {
+            const fetchWithSyncWatchdog = (
+              url: Parameters<typeof fetch>[0],
+              init?: Parameters<typeof fetch>[1],
+            ): Promise<Response> => {
+              const urlStr = typeof url === 'string' ? url : url.toString();
+              if (!urlStr.includes('/_matrix/client') || !urlStr.includes('/sync')) {
+                return fetch(url, init);
+              }
+              const ctrl = new AbortController();
+              const timer = setTimeout(
+                () => ctrl.abort(new DOMException('NanoClaw sync watchdog (90s)', 'AbortError')),
+                90_000,
+              );
+              return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+            };
+            return mkMatrixClient({
+              ...opts,
+              localTimeoutMs: 60_000,
+              fetchFn: fetchWithSyncWatchdog,
+            } as ICreateClientOpts);
+          },
         }),
         groupFolder,
       );

@@ -34,6 +34,7 @@ import { getAgentGroup } from './db/agent-groups.js';
 import {
   countDueMessages,
   getApiRetryState,
+  getContextCompactionState,
   getContainerState,
   getMessageForRetry,
   getProcessingClaims,
@@ -45,7 +46,12 @@ import {
 import { log } from './log.js';
 import { openInboundDb, openOutboundDb, inboundDbPath, heartbeatPath } from './session-manager.js';
 import { isContainerRunning, killContainer, wakeContainer } from './container-runner.js';
-import { sendApiRetryAlert, sendApiRetryResolvedAlert } from './alerts.js';
+import {
+  sendApiRetryAlert,
+  sendApiRetryResolvedAlert,
+  sendContextNearLimitAlert,
+  sendContextNearLimitResolvedAlert,
+} from './alerts.js';
 import type { Session } from './types.js';
 
 const SWEEP_INTERVAL_MS = 60_000;
@@ -65,6 +71,9 @@ const API_RETRY_ALERT_THRESHOLD_MS = 3 * 60 * 1000;
 // Cleared when the retry resolves so a future retry on the same session
 // will produce a fresh alert.
 const alertedSessions = new Set<string>();
+
+// Sessions for which a context near-limit alert has already been sent.
+const contextAlertedSessions = new Set<string>();
 
 export type StuckDecision =
   | { action: 'ok' }
@@ -203,6 +212,9 @@ async function sweepSession(session: Session): Promise<void> {
     // in an Anthropic API retry window longer than the threshold.
     if (outDb) {
       const retryAt = getApiRetryState(outDb);
+      if (retryAt) {
+        log.debug('Sweep: API retry state found', { sessionId: session.id, retryAt });
+      }
       if (retryAt && !alertedSessions.has(session.id)) {
         const age = Date.now() - new Date(retryAt).getTime();
         if (age >= API_RETRY_ALERT_THRESHOLD_MS) {
@@ -215,6 +227,21 @@ async function sweepSession(session: Session): Promise<void> {
         alertedSessions.delete(session.id);
         sendApiRetryResolvedAlert(agentGroup.name).catch((err) =>
           log.error('Failed to send API retry resolved alert', { sessionId: session.id, err }),
+        );
+      }
+
+      // 7. Context near-limit alert: notify when a session compacted a large
+      // context and is still live — risk of "Prompt too long" on the next turn.
+      const compaction = getContextCompactionState(outDb);
+      if (compaction && !contextAlertedSessions.has(session.id)) {
+        contextAlertedSessions.add(session.id);
+        sendContextNearLimitAlert(agentGroup.name, compaction.preTokens).catch((err) =>
+          log.error('Failed to send context near-limit alert', { sessionId: session.id, err }),
+        );
+      } else if (!compaction && contextAlertedSessions.has(session.id)) {
+        contextAlertedSessions.delete(session.id);
+        sendContextNearLimitResolvedAlert(agentGroup.name).catch((err) =>
+          log.error('Failed to send context near-limit resolved alert', { sessionId: session.id, err }),
         );
       }
     }

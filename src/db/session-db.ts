@@ -223,6 +223,23 @@ export function getApiRetryState(outDb: Database.Database): string | null {
   }
 }
 
+export function getContextCompactionState(
+  outDb: Database.Database,
+): { compactionAt: string; preTokens: number } | null {
+  try {
+    const atRow = outDb.prepare("SELECT value FROM session_state WHERE key = 'context_compaction_at'").get() as
+      | { value: string }
+      | undefined;
+    const tokensRow = outDb
+      .prepare("SELECT value FROM session_state WHERE key = 'context_compaction_pre_tokens'")
+      .get() as { value: string } | undefined;
+    if (!atRow?.value) return null;
+    return { compactionAt: atRow.value, preTokens: parseInt(tokensRow?.value ?? '0', 10) };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // messages_out (read-only from host)
 // ---------------------------------------------------------------------------

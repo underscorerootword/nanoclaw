@@ -62,3 +62,17 @@ export async function sendApiRetryResolvedAlert(agentGroupName: string): Promise
   await sendToAlertsRoom(text);
   log.info('Alerts: API retry resolved alert sent', { agentGroupName });
 }
+
+export async function sendContextNearLimitAlert(agentGroupName: string, preTokens: number): Promise<void> {
+  const text =
+    `⚠️ Context warning: **${agentGroupName}** compacted ${preTokens.toLocaleString()} tokens from its session history.\n` +
+    `The session is large — consider starting a fresh conversation before the next complex task to avoid "Prompt too long" errors.`;
+  await sendToAlertsRoom(text);
+  log.info('Alerts: context near-limit alert sent', { agentGroupName, preTokens });
+}
+
+export async function sendContextNearLimitResolvedAlert(agentGroupName: string): Promise<void> {
+  const text = `✅ **${agentGroupName}**: Session ended — context pressure resolved.`;
+  await sendToAlertsRoom(text);
+  log.info('Alerts: context near-limit resolved alert sent', { agentGroupName });
+}
