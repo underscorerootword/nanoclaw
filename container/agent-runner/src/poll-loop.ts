@@ -8,6 +8,8 @@ import {
   setContinuation,
   setApiRetryState,
   clearApiRetryState,
+  setContextCompactionState,
+  clearContextCompactionState,
 } from './db/session-state.js';
 import {
   formatMessages,
@@ -297,8 +299,21 @@ async function processQuery(
       const newIds = newMessages.map((m) => m.id);
       markProcessing(newIds);
 
-      const prompt = formatMessages(newMessages);
-      log(`Pushing ${newMessages.length} follow-up message(s) into active query`);
+      const STATUS_REQUEST_RE =
+        /\b(update|status|progress|still working|how.{0,15}going|what.{0,15}doing|any progress|check in|checking in)\b/i;
+      const hasStatusRequest = newMessages.some((m) => {
+        const text = (JSON.parse(m.content) as { text?: string }).text ?? '';
+        return STATUS_REQUEST_RE.test(text);
+      });
+
+      const basePrompt = formatMessages(newMessages);
+      const prompt = hasStatusRequest
+        ? `[system: The user sent a status request mid-task. Before continuing your work, send a brief message acknowledging you are still working and what you are currently doing. Then continue the task.]\n\n${basePrompt}`
+        : basePrompt;
+
+      log(
+        `Pushing ${newMessages.length} follow-up message(s) into active query${hasStatusRequest ? ' (status request detected)' : ''}`,
+      );
       query.push(prompt);
 
       markCompleted(newIds);
@@ -337,6 +352,7 @@ async function processQuery(
     done = true;
     clearInterval(pollHandle);
     clearApiRetryState();
+    clearContextCompactionState();
   }
 
   return { continuation: queryContinuation };
@@ -360,6 +376,9 @@ function handleEvent(event: ProviderEvent, _routing: RoutingContext): void {
       break;
     case 'progress':
       log(`Progress: ${event.message}`);
+      break;
+    case 'compact':
+      setContextCompactionState(event.preTokens);
       break;
   }
 }

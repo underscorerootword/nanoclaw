@@ -18,9 +18,9 @@ function continuationKey(providerName: string): string {
 }
 
 function getValue(key: string): string | undefined {
-  const row = getOutboundDb()
-    .prepare('SELECT value FROM session_state WHERE key = ?')
-    .get(key) as { value: string } | undefined;
+  const row = getOutboundDb().prepare('SELECT value FROM session_state WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined;
   return row?.value;
 }
 
@@ -88,4 +88,23 @@ export function setApiRetryState(timestamp: string): void {
 
 export function clearApiRetryState(): void {
   deleteValue('api_retry_at');
+}
+
+// Threshold: sessions that compact >80k tokens are flagged as large. Routine
+// small compactions (e.g. a single long tool result) stay below this.
+const CONTEXT_COMPACTION_THRESHOLD = 80_000;
+
+export function setContextCompactionState(preTokens: number): void {
+  if (preTokens < CONTEXT_COMPACTION_THRESHOLD) return;
+  setValue('context_compaction_pre_tokens', String(preTokens));
+  // Preserve the earliest compaction timestamp — if compaction fires multiple
+  // times in one session, the host sees when the session first became large.
+  if (getValue('context_compaction_at') === undefined) {
+    setValue('context_compaction_at', new Date().toISOString());
+  }
+}
+
+export function clearContextCompactionState(): void {
+  deleteValue('context_compaction_at');
+  deleteValue('context_compaction_pre_tokens');
 }

@@ -11,6 +11,38 @@ For detailed release notes, see the [full changelog on the documentation site](h
 Changes made to this install relative to the upstream base. Most recent first.
 DB-only changes (messaging group wiring, session cleanup) are noted here but not captured in git.
 
+### 2026-05-05 — Weekend delay post-mortem: four reliability fixes
+
+Root-cause analysis of delays observed 2026-05-03/04 (A1-O1, A1-O2) produced four fixes.
+
+**Fix 1 — Matrix sync watchdog (`src/channels/matrix.ts`)**
+
+`localTimeoutMs: 60_000` does not apply to `/sync` long-polls in matrix-js-sdk v41 — observed hangs of 9–18 min (646–1082s in logs). Added a custom `fetchFn` (`fetchWithSyncWatchdog`) that wraps every `/sync` request with an `AbortController` capped at 90s. Non-sync requests are passed through unchanged.
+
+**Fix 2 — API retry debug logging (`src/host-sweep.ts`)**
+
+The sweep now emits a `log.debug` entry whenever it reads a non-null `api_retry_at` from a session's `outbound.db`, enabling future incidents to distinguish "was retrying, alert threshold not yet reached" from "was not retrying at all."
+
+**Fix 3 — Context near-limit alert via Matrix Alerts room**
+
+Large auto-compactions (>80k tokens) now trigger an operator alert in `MATRIX_ALERTS_ROOM_ID`, then a resolved alert when the session ends.
+
+- Container (`container/agent-runner/src/providers/claude.ts`): emits a new `compact` event type from the `compact_boundary` SDK event.
+- Container (`container/agent-runner/src/providers/types.ts`): adds `compact` to the `ProviderEvent` union.
+- Container (`container/agent-runner/src/db/session-state.ts`): `setContextCompactionState` / `clearContextCompactionState` persist `context_compaction_at` + `context_compaction_pre_tokens` in `session_state`.
+- Container (`container/agent-runner/src/poll-loop.ts`): handles `compact` event in `handleEvent`; clears state in the `finally` block.
+- Host (`src/db/session-db.ts`): `getContextCompactionState` reads the two keys from `outbound.db`.
+- Host (`src/alerts.ts`): `sendContextNearLimitAlert` / `sendContextNearLimitResolvedAlert` deliver to `MATRIX_ALERTS_ROOM_ID`.
+- Host (`src/host-sweep.ts`): reads compaction state each sweep tick; fires alert once per session per run; clears when session ends.
+
+**Fix 4 — Mid-task status acknowledgement (`container/agent-runner/src/poll-loop.ts`)**
+
+When a status-request message ("update?", "still working?", etc.) arrives during an active query, a system instruction is prepended to the push prompt so the agent acknowledges before continuing. Previously the message was silently absorbed until the task completed.
+
+**Files:** `src/channels/matrix.ts`, `src/host-sweep.ts`, `src/db/session-db.ts`, `src/alerts.ts`, `container/agent-runner/src/providers/claude.ts`, `container/agent-runner/src/providers/types.ts`, `container/agent-runner/src/db/session-state.ts`, `container/agent-runner/src/poll-loop.ts`
+
+---
+
 ### 2026-05-01 — Matrix Alerts room for Anthropic API delay notifications
 
 **Problem:** When the Anthropic API was degraded, agents retried silently for up to 81 minutes with no operator visibility. The only signal was a belated response appearing long after the original message.

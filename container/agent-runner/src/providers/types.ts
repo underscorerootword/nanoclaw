@@ -79,6 +79,13 @@ export type ProviderEvent =
   | { type: 'error'; message: string; retryable: boolean; classification?: string }
   | { type: 'progress'; message: string }
   /**
+   * Emitted when the SDK auto-compacts the conversation history. preTokens is
+   * the number of tokens that were summarised away. The host sweep reads a
+   * persisted flag from outbound.db and alerts the operator when this exceeds
+   * the large-session threshold (80k tokens).
+   */
+  | { type: 'compact'; preTokens: number }
+  /**
    * Liveness signal. Providers MUST yield this on every underlying SDK
    * event (tool call, thinking, partial message, anything) so the
    * poll-loop's idle timer stays honest during long tool runs.
